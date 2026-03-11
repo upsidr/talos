@@ -2,20 +2,18 @@ package proxy
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/upsidr/talos/internal/cert"
 	"github.com/upsidr/talos/internal/config"
 	"github.com/upsidr/talos/internal/store"
 )
@@ -157,7 +155,7 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 	}
 
 	leaf := state.PeerCertificates[0]
-	fingerprint := certFingerprint(leaf)
+	fingerprint := cert.Fingerprint(leaf)
 
 	// Check certificate status (cache → DB)
 	status, identity, version, cacheHit := s.cache.Get(fingerprint)
@@ -251,15 +249,6 @@ func (s *Server) logEvent(event, clientAddr, fingerprint, identity string, versi
 		zap.String("reason", reason),
 		zap.String("backend", s.cfg.Proxy.BackendAddress),
 	)
-}
-
-func certFingerprint(cert *x509.Certificate) string {
-	sum := sha256.Sum256(cert.Raw)
-	parts := make([]string, len(sum))
-	for i, b := range sum {
-		parts[i] = hex.EncodeToString([]byte{b})
-	}
-	return "SHA256:" + strings.Join(parts, ":")
 }
 
 func parseTLSVersion(v string) (uint16, error) {

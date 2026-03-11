@@ -17,6 +17,9 @@ coverage.html
 *.swp
 *.swo
 
+# Config with secrets
+talos.yaml
+
 # OS
 .DS_Store
 

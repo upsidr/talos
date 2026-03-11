@@ -1,10 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+
+	"github.com/upsidr/talos/internal/proxy"
+	"github.com/upsidr/talos/internal/store"
 )
 
 var version = "dev"
@@ -47,10 +54,7 @@ func newProxyCmd() *cobra.Command {
 	start := &cobra.Command{
 		Use:   "start",
 		Short: "Start the TCP proxy server",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: implement
-			return fmt.Errorf("not implemented")
-		},
+		RunE:  runProxyStart,
 	}
 	start.Flags().StringP("config", "c", "talos.yaml", "Path to configuration file")
 
@@ -58,101 +62,41 @@ func newProxyCmd() *cobra.Command {
 	return cmd
 }
 
-func newCertCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "cert",
-		Short: "Certificate management commands",
+func runProxyStart(cmd *cobra.Command, args []string) error {
+	cfgPath, _ := cmd.Flags().GetString("config")
+
+	cfg, err := loadConfig(cfgPath)
+	if err != nil {
+		return err
 	}
 
-	issue := &cobra.Command{
-		Use:   "issue [identity]",
-		Short: "Issue a new certificate",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: implement
-			return fmt.Errorf("not implemented")
-		},
+	logger, err := initLogger(cfg.Logging)
+	if err != nil {
+		return fmt.Errorf("init logger: %w", err)
 	}
-	issue.Flags().String("expires-in", "", "Certificate validity duration (e.g., 90d, 365d)")
-	issue.Flags().String("out-dir", ".", "Output directory for certificate files")
-	issue.Flags().String("passphrase-file", "", "File containing passphrase for PKCS#12 bundle")
-	issue.Flags().StringP("config", "c", "talos.yaml", "Path to configuration file")
+	defer logger.Sync()
 
-	revoke := &cobra.Command{
-		Use:   "revoke [identity]",
-		Short: "Revoke a certificate",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: implement
-			return fmt.Errorf("not implemented")
-		},
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pool, err := initDatabase(ctx, cfg.Database)
+	if err != nil {
+		return err
 	}
-	revoke.Flags().Int("version", 0, "Certificate version to revoke")
-	revoke.Flags().Bool("all", false, "Revoke all versions")
-	revoke.Flags().String("reason", "", "Revocation reason (for audit trail)")
-	revoke.Flags().StringP("config", "c", "talos.yaml", "Path to configuration file")
+	defer pool.Close()
 
-	reissue := &cobra.Command{
-		Use:   "reissue [identity]",
-		Short: "Issue a new certificate version",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: implement
-			return fmt.Errorf("not implemented")
-		},
-	}
-	reissue.Flags().String("expires-in", "", "Certificate validity duration")
-	reissue.Flags().String("out-dir", ".", "Output directory for certificate files")
-	reissue.Flags().String("passphrase-file", "", "File containing passphrase for PKCS#12 bundle")
-	reissue.Flags().StringP("config", "c", "talos.yaml", "Path to configuration file")
+	certStore := store.NewPostgresStore(pool)
+	srv := proxy.NewServer(cfg, certStore, logger)
 
-	list := &cobra.Command{
-		Use:   "list",
-		Short: "List all certificates",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: implement
-			return fmt.Errorf("not implemented")
-		},
-	}
-	list.Flags().String("status", "", "Filter by status (active, revoked)")
-	list.Flags().StringP("output", "o", "table", "Output format (table, json)")
-	list.Flags().StringP("config", "c", "talos.yaml", "Path to configuration file")
+	// Graceful shutdown on SIGINT/SIGTERM
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigCh
+		logger.Info("received signal, shutting down", zap.String("signal", sig.String()))
+		cancel()
+	}()
 
-	show := &cobra.Command{
-		Use:   "show [identity]",
-		Short: "Show certificate details",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: implement
-			return fmt.Errorf("not implemented")
-		},
-	}
-	show.Flags().Int("version", 0, "Certificate version to show")
-	show.Flags().StringP("config", "c", "talos.yaml", "Path to configuration file")
-
-	cmd.AddCommand(issue, revoke, reissue, list, show)
-	return cmd
-}
-
-func newCACmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "ca",
-		Short: "Certificate Authority commands",
-	}
-
-	init := &cobra.Command{
-		Use:   "init",
-		Short: "Initialize the CA (generate CA cert from KMS key)",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: implement
-			return fmt.Errorf("not implemented")
-		},
-	}
-	init.Flags().String("kms-key", "", "GCP KMS key resource name")
-	init.Flags().String("subject", "", "CA certificate subject DN")
-	init.Flags().String("expires-in", "10y", "CA certificate validity")
-	init.Flags().StringP("config", "c", "talos.yaml", "Path to configuration file")
-
-	cmd.AddCommand(init)
-	return cmd
+	logger.Info("starting talos proxy", zap.String("version", version))
+	return srv.Run(ctx)
 }
