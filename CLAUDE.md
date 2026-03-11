@@ -11,17 +11,14 @@ Talos is a sub-project within the Elpis workspace (FreeIPA + Cloudflare Tunnel i
 ## Build & Run
 
 ```bash
-# Build
-go build ./cmd/talos
-
-# Run tests (none exist yet)
-go test ./...
+make build          # Build binary with version from git tags
+make test           # Run tests with race detector
+make lint           # Run golangci-lint
+make clean          # Remove built binary
 
 # Run a single package's tests
 go test ./internal/proxy/
 ```
-
-No Makefile exists — use standard Go toolchain commands.
 
 ## Architecture
 

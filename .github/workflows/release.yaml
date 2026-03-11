@@ -21,7 +21,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
 
-      - run: go test ./... -race
+      - run: make test
 
   release:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
@@ -41,6 +41,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
@@ -51,7 +53,7 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
-        run: go build -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o talos ./cmd/talos
+        run: make build
 
       - name: Package tarball
         run: tar czf talos-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz talos

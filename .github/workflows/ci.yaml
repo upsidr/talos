@@ -18,4 +18,4 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
 
-      - run: go test ./... -race
+      - run: make test
