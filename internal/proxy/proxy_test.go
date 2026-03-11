@@ -100,7 +100,7 @@ func TestProxy_FailClosedOnDBError(t *testing.T) {
 	if err != nil {
 		return // Acceptable
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	_, _ = conn.Write([]byte("hello"))
 	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))

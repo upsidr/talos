@@ -66,3 +66,4 @@ Defined in `internal/store/schema.sql` with 3 tables:
 - All comments and documentation in the parent Elpis project are in Japanese; Talos documentation is in English
 - Design document serves as the implementation roadmap — refer to `docs/002-Talos-CertAuthTCPProxy.md` for detailed specs
 - Dev certificates go in `dev/` (gitignored)
+- **Always run `make lint` before committing** — CI will reject code with lint errors. A pre-commit hook in `.githooks/` runs lint automatically (activate with `git config core.hooksPath .githooks`)
