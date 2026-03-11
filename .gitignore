@@ -1,0 +1,28 @@
+# Binaries
+/talos
+/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test
+*.test
+*.out
+coverage.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Dev certificates (never commit real certs)
+dev/*.p12
+dev/*.key
+dev/*.crt
+dev/*.pem
+!dev/.gitkeep
