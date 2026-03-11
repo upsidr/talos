@@ -97,7 +97,6 @@ func (s *PostgresStore) ListCerts(ctx context.Context, opts ListCertsOptions) ([
 	if opts.Version != nil {
 		query += fmt.Sprintf(" AND version = $%d", argIdx)
 		args = append(args, *opts.Version)
-		argIdx++
 	}
 
 	query += " ORDER BY identity, version"

@@ -78,7 +78,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", s.cfg.Proxy.ListenAddress, err)
 	}
-	defer s.listener.Close()
+	defer func() { _ = s.listener.Close() }()
 
 	s.logger.Info("proxy started",
 		zap.String("listen", s.cfg.Proxy.ListenAddress),
@@ -89,7 +89,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		s.listener.Close()
+		_ = s.listener.Close()
 	}()
 
 	for {
@@ -110,7 +110,7 @@ func (s *Server) Run(ctx context.Context) error {
 				s.mu.Unlock()
 				s.logger.Warn("max connections reached, rejecting",
 					zap.String("client", conn.RemoteAddr().String()))
-				conn.Close()
+				_ = conn.Close()
 				continue
 			}
 			s.connCount++
@@ -126,7 +126,7 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 	clientAddr := conn.RemoteAddr().String()
 
 	defer func() {
-		conn.Close()
+		_ = conn.Close()
 		if s.cfg.Proxy.MaxConnections > 0 {
 			s.mu.Lock()
 			s.connCount--
@@ -202,7 +202,7 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 		s.logEvent("conn_rejected", clientAddr, fingerprint, identity, version, cacheHit, "backend_unreachable", startTime)
 		return
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	s.logger.Info("connection accepted",
 		zap.String("client", clientAddr),

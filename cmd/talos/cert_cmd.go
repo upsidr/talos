@@ -95,7 +95,7 @@ func runCertIssue(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init logger: %w", err)
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	ctx := context.Background()
 	pool, err := initDatabase(ctx, cfg.Database)
@@ -128,7 +128,7 @@ func issueCert(ctx context.Context, certStore *store.PostgresStore, cfg config.C
 	if err != nil {
 		return err
 	}
-	defer signer.Close()
+	defer func() { _ = signer.Close() }()
 
 	// Determine validity
 	validity := cfg.Certificate.DefaultValidity
@@ -229,7 +229,7 @@ func runCertRevoke(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init logger: %w", err)
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	ctx := context.Background()
 	pool, err := initDatabase(ctx, cfg.Database)
@@ -295,7 +295,7 @@ func runCertReissue(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init logger: %w", err)
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	ctx := context.Background()
 	pool, err := initDatabase(ctx, cfg.Database)
@@ -370,13 +370,13 @@ func runCertList(cmd *cobra.Command, args []string) error {
 
 	// Table format
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "IDENTITY\tVERSION\tSTATUS\tISSUED\tEXPIRES\tFINGERPRINT")
+	_, _ = fmt.Fprintln(w, "IDENTITY\tVERSION\tSTATUS\tISSUED\tEXPIRES\tFINGERPRINT")
 	for _, c := range certs {
 		fp := c.FingerprintSHA256
 		if len(fp) > 23 {
 			fp = fp[:23] + "..."
 		}
-		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\t%s\n",
 			c.Identity, c.Version, c.Status,
 			c.IssuedAt.Format("2006-01-02"),
 			c.ExpiresAt.Format("2006-01-02"),

@@ -26,16 +26,16 @@ GCP managed services (Memorystore, Cloud SQL) don't support per-client certifica
 
 ### Pre-built binaries
 
-Download the latest release from [GitHub Releases](https://github.com/upsidr/elpis/releases):
+Download the latest release from [GitHub Releases](https://github.com/upsidr/talos/releases):
 
 ```bash
 # Example: Linux (amd64)
-curl -LO https://github.com/upsidr/elpis/releases/latest/download/talos-linux-amd64.tar.gz
+curl -LO https://github.com/upsidr/talos/releases/latest/download/talos-linux-amd64.tar.gz
 tar xzf talos-linux-amd64.tar.gz
 sudo mv talos /usr/local/bin/
 
 # Example: macOS (Apple Silicon)
-curl -LO https://github.com/upsidr/elpis/releases/latest/download/talos-darwin-arm64.tar.gz
+curl -LO https://github.com/upsidr/talos/releases/latest/download/talos-darwin-arm64.tar.gz
 tar xzf talos-darwin-arm64.tar.gz
 sudo mv talos /usr/local/bin/
 ```

@@ -54,7 +54,7 @@ func runCAInit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init logger: %w", err)
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	validity, err := cert.ParseDuration(expiresIn)
 	if err != nil {
@@ -73,7 +73,7 @@ func runCAInit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("generate local CA: %w", err)
 	}
-	defer signer.Close()
+	defer func() { _ = signer.Close() }()
 
 	// Generate server certificate
 	logger.Info("generating server certificate", zap.Strings("hosts", serverHosts))

@@ -50,7 +50,7 @@ func TestLocalSigner_LoadFromFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalSigner() error = %v", err)
 	}
-	defer signer.Close()
+	defer func() { _ = signer.Close() }()
 
 	if signer.Public() == nil {
 		t.Error("Public() returned nil")

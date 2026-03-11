@@ -19,7 +19,7 @@ func TestProxy_AcceptActiveCert(t *testing.T) {
 	pki := testPKI(t)
 	mockStore := store.NewMockStore()
 
-	mockStore.InsertCert(context.Background(), &store.Certificate{
+	_ = mockStore.InsertCert(context.Background(), &store.Certificate{
 		ID:                "cert-1",
 		Identity:          "test@example.com",
 		Version:           1,
@@ -37,13 +37,13 @@ func TestProxy_AcceptActiveCert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial failed: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	msg := []byte("hello talos")
-	conn.Write(msg)
+	_, _ = conn.Write(msg)
 
 	buf := make([]byte, 1024)
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	n, err := conn.Read(buf)
 	if err != nil {
 		t.Fatalf("read failed: %v", err)
@@ -57,7 +57,7 @@ func TestProxy_RejectRevokedCert(t *testing.T) {
 	pki := testPKI(t)
 	mockStore := store.NewMockStore()
 
-	mockStore.InsertCert(context.Background(), &store.Certificate{
+	_ = mockStore.InsertCert(context.Background(), &store.Certificate{
 		ID:                "cert-1",
 		Identity:          "test@example.com",
 		Version:           1,
@@ -75,10 +75,10 @@ func TestProxy_RejectRevokedCert(t *testing.T) {
 	if err != nil {
 		return // Acceptable — rejected at connection level
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
-	conn.Write([]byte("hello"))
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, _ = conn.Write([]byte("hello"))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, err = conn.Read(make([]byte, 1024))
 	if err == nil {
 		t.Error("expected read to fail for revoked cert, but succeeded")
@@ -102,8 +102,8 @@ func TestProxy_FailClosedOnDBError(t *testing.T) {
 	}
 	defer conn.Close()
 
-	conn.Write([]byte("hello"))
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, _ = conn.Write([]byte("hello"))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, err = conn.Read(make([]byte, 1024))
 	if err == nil {
 		t.Error("expected read to fail on DB error (fail-closed), but succeeded")
@@ -114,7 +114,7 @@ func TestProxy_MaxConnections(t *testing.T) {
 	pki := testPKI(t)
 	mockStore := store.NewMockStore()
 
-	mockStore.InsertCert(context.Background(), &store.Certificate{
+	_ = mockStore.InsertCert(context.Background(), &store.Certificate{
 		ID:                "cert-1",
 		Identity:          "test@example.com",
 		Version:           1,
@@ -137,27 +137,27 @@ func TestProxy_MaxConnections(t *testing.T) {
 		if err != nil {
 			t.Fatalf("connection %d failed: %v", i, err)
 		}
-		conn.Write([]byte("ping"))
+		_, _ = conn.Write([]byte("ping"))
 		buf := make([]byte, 4)
-		conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-		conn.Read(buf)
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_, _ = conn.Read(buf)
 		conns = append(conns, conn)
 	}
 
 	// 3rd connection should be rejected
 	conn3, err := tls.Dial("tcp", proxyAddr, tlsCfg)
 	if err == nil {
-		conn3.Write([]byte("ping"))
-		conn3.SetReadDeadline(time.Now().Add(time.Second))
+		_, _ = conn3.Write([]byte("ping"))
+		_ = conn3.SetReadDeadline(time.Now().Add(time.Second))
 		_, err := conn3.Read(make([]byte, 1024))
-		conn3.Close()
+		_ = conn3.Close()
 		if err == nil {
 			t.Error("expected 3rd connection to be rejected at max connections, but it succeeded")
 		}
 	}
 
 	for _, c := range conns {
-		c.Close()
+		_ = c.Close()
 	}
 }
 
@@ -182,8 +182,8 @@ func setupProxyDirectWithMaxConns(t *testing.T, pki *testPKIResult, mockStore *s
 				return
 			}
 			go func(c net.Conn) {
-				defer c.Close()
-				io.Copy(c, c)
+				defer func() { _ = c.Close() }()
+				_, _ = io.Copy(c, c)
 			}(conn)
 		}
 	}()
@@ -226,7 +226,7 @@ func setupProxyDirectWithMaxConns(t *testing.T, pki *testPKIResult, mockStore *s
 
 	go func() {
 		<-ctx.Done()
-		listener.Close()
+		_ = listener.Close()
 	}()
 
 	go func() {
@@ -240,7 +240,7 @@ func setupProxyDirectWithMaxConns(t *testing.T, pki *testPKIResult, mockStore *s
 				srv.mu.Lock()
 				if srv.connCount >= cfg.Proxy.MaxConnections {
 					srv.mu.Unlock()
-					conn.Close()
+					_ = conn.Close()
 					continue
 				}
 				srv.connCount++
@@ -253,7 +253,7 @@ func setupProxyDirectWithMaxConns(t *testing.T, pki *testPKIResult, mockStore *s
 
 	cleanup := func() {
 		cancel()
-		backendListener.Close()
+		_ = backendListener.Close()
 	}
 
 	return listener.Addr().String(), cleanup

@@ -74,7 +74,7 @@ func runProxyStart(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init logger: %w", err)
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
