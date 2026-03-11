@@ -24,15 +24,37 @@ GCP managed services (Memorystore, Cloud SQL) don't support per-client certifica
 
 ## Installation
 
-```bash
-# Build from source
-go build -o talos ./cmd/talos
+### Pre-built binaries
 
-# Verify
-./talos version
+Download the latest release from [GitHub Releases](https://github.com/upsidr/elpis/releases):
+
+```bash
+# Example: Linux (amd64)
+curl -LO https://github.com/upsidr/elpis/releases/latest/download/talos-linux-amd64.tar.gz
+tar xzf talos-linux-amd64.tar.gz
+sudo mv talos /usr/local/bin/
+
+# Example: macOS (Apple Silicon)
+curl -LO https://github.com/upsidr/elpis/releases/latest/download/talos-darwin-arm64.tar.gz
+tar xzf talos-darwin-arm64.tar.gz
+sudo mv talos /usr/local/bin/
 ```
 
+Available tarballs: `talos-{linux,darwin}-{amd64,arm64}.tar.gz`
+
+### Build from source
+
 Requires **Go 1.24+**.
+
+```bash
+go build -o talos ./cmd/talos
+```
+
+### Verify
+
+```bash
+talos version
+```
 
 ## Quick Start
 
@@ -167,4 +189,4 @@ Talos is a sub-project within the [Elpis](https://github.com/upsidr/elpis) works
 
 ## License
 
-Internal — UPSIDR, Inc.
+[Apache License 2.0](LICENSE)
