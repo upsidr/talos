@@ -28,6 +28,41 @@ func TestCache_PutAndGet(t *testing.T) {
 	}
 }
 
+func TestCache_GetStatus(t *testing.T) {
+	c := NewCache(5*time.Second, 100)
+
+	c.Put("fp1", store.StatusActive, "user@test.com", 1)
+
+	status, ok := c.GetStatus("fp1")
+	if !ok {
+		t.Fatal("expected cache hit, got miss")
+	}
+	if status != store.StatusActive {
+		t.Errorf("status = %v, want %v", status, store.StatusActive)
+	}
+}
+
+func TestCache_GetStatus_Miss(t *testing.T) {
+	c := NewCache(5*time.Second, 100)
+
+	_, ok := c.GetStatus("nonexistent")
+	if ok {
+		t.Error("expected cache miss for nonexistent key")
+	}
+}
+
+func TestCache_GetStatus_Expired(t *testing.T) {
+	c := NewCache(50*time.Millisecond, 100)
+
+	c.Put("fp1", store.StatusActive, "user@test.com", 1)
+	time.Sleep(100 * time.Millisecond)
+
+	_, ok := c.GetStatus("fp1")
+	if ok {
+		t.Error("expected cache miss after TTL expiry")
+	}
+}
+
 func TestCache_Miss(t *testing.T) {
 	c := NewCache(5*time.Second, 100)
 

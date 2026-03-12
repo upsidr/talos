@@ -19,6 +19,7 @@ coverage.html
 
 # Config with secrets
 talos.yaml
+talos.dev.yaml
 
 # OS
 .DS_Store

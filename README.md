@@ -1,6 +1,21 @@
 # Talos
 
-**Certificate-authenticated mTLS TCP proxy** — named after the bronze guardian of Crete.
+<p align="center">
+  <img src="docs/talos-overview.jpg" alt="Talos — Certificate-authenticated mTLS TCP proxy" width="720" />
+</p>
+
+<p align="center">
+  <strong>Certificate-authenticated mTLS TCP proxy</strong> — named after the bronze guardian of Crete
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#why">Why Talos?</a> &middot;
+  <a href="#cli-reference">CLI Reference</a> &middot;
+  <a href="docs/v0.1.0-design.md">Design Doc</a>
+</p>
+
+---
 
 Talos sits in front of backend TCP services (Redis, PostgreSQL, MongoDB, etc.) and authenticates every connection using client certificates with real-time revocation checks against a PostgreSQL database.
 

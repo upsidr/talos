@@ -26,6 +26,7 @@ func main() {
 		newProxyCmd(),
 		newCertCmd(),
 		newCACmd(),
+		newDBCmd(),
 		newVersionCmd(),
 	)
 
