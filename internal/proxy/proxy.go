@@ -85,6 +85,7 @@ func (s *Server) Run(ctx context.Context) error {
 		zap.String("backend", s.cfg.Proxy.BackendAddress),
 		zap.Duration("cache_ttl", s.cfg.Cache.TTL),
 		zap.String("tls_min_version", s.cfg.TLS.MinVersion),
+		zap.Duration("revocation_check_interval", s.cfg.Proxy.RevocationCheckInterval),
 	)
 
 	go func() {
@@ -211,23 +212,31 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 		zap.Bool("cache_hit", cacheHit),
 		zap.String("backend", s.cfg.Proxy.BackendAddress))
 
-	// Bidirectional relay
-	var wg sync.WaitGroup
-	wg.Add(2)
-
+	// Bidirectional relay with optional periodic revocation checks
 	var bytesTx, bytesRx int64
+	var revoked bool
 
-	go func() {
-		defer wg.Done()
-		bytesTx, _ = io.Copy(backend, tlsConn)
-	}()
-	go func() {
-		defer wg.Done()
-		bytesRx, _ = io.Copy(tlsConn, backend)
-	}()
+	interval := s.cfg.Proxy.RevocationCheckInterval
+	if interval > 0 {
+		bytesTx, bytesRx, revoked = s.relayWithRevocationCheck(ctx, tlsConn, backend, fingerprint, interval)
+	} else {
+		bytesTx, bytesRx = s.relaySimple(tlsConn, backend)
+	}
 
-	wg.Wait()
 	duration := time.Since(startTime)
+
+	if revoked {
+		s.logger.Warn("connection terminated: certificate revoked during session",
+			zap.String("client", clientAddr),
+			zap.String("identity", identity),
+			zap.Int("version", version),
+			zap.Duration("duration", duration),
+			zap.Int64("bytes_tx", bytesTx),
+			zap.Int64("bytes_rx", bytesRx),
+			zap.String("fingerprint", fingerprint))
+		s.logEvent("conn_revoked", clientAddr, fingerprint, identity, version, false, "certificate_revoked_during_session", startTime)
+		return
+	}
 
 	s.logger.Info("connection closed",
 		zap.String("client", clientAddr),
@@ -236,6 +245,147 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 		zap.Duration("duration", duration),
 		zap.Int64("bytes_tx", bytesTx),
 		zap.Int64("bytes_rx", bytesRx))
+}
+
+// relaySimple performs a simple bidirectional relay without revocation checks.
+func (s *Server) relaySimple(client, backend net.Conn) (bytesTx, bytesRx int64) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		bytesTx, _ = io.Copy(backend, client)
+	}()
+	go func() {
+		defer wg.Done()
+		bytesRx, _ = io.Copy(client, backend)
+	}()
+
+	wg.Wait()
+	return
+}
+
+// checkRevocation checks whether a certificate is still active.
+// Returns true if the certificate is active, false if revoked or on error (fail-closed).
+func (s *Server) checkRevocation(ctx context.Context, fingerprint string) bool {
+	// Try cache first
+	if status, ok := s.cache.GetStatus(fingerprint); ok {
+		return status == store.StatusActive
+	}
+
+	// Cache miss — query DB
+	cert, err := s.store.GetCertByFingerprint(ctx, fingerprint)
+	if err != nil {
+		s.logger.Error("revocation re-check: database error (fail-closed)",
+			zap.String("fingerprint", fingerprint),
+			zap.Error(err))
+		return false
+	}
+	if cert == nil {
+		return false
+	}
+
+	// Update cache with fresh data
+	s.cache.Put(fingerprint, cert.Status, cert.Identity, cert.Version)
+	return cert.Status == store.StatusActive
+}
+
+// relayWithRevocationCheck performs a bidirectional relay that periodically
+// checks whether the client certificate has been revoked. If revoked, both
+// connections are closed immediately.
+func (s *Server) relayWithRevocationCheck(ctx context.Context, client, backend net.Conn, fingerprint string, interval time.Duration) (bytesTx, bytesRx int64, revoked bool) {
+	done := make(chan struct{})
+	var closeOnce sync.Once
+	closeAll := func() {
+		closeOnce.Do(func() {
+			close(done)
+			_ = client.Close()
+			_ = backend.Close()
+		})
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// client → backend
+	go func() {
+		defer wg.Done()
+		bytesTx = s.copyWithDeadline(client, backend, interval, done)
+	}()
+
+	// backend → client
+	go func() {
+		defer wg.Done()
+		bytesRx = s.copyWithDeadline(backend, client, interval, done)
+	}()
+
+	// Revocation check ticker
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			wg.Wait()
+			return bytesTx, bytesRx, false
+		case <-ctx.Done():
+			closeAll()
+			wg.Wait()
+			return bytesTx, bytesRx, false
+		case <-ticker.C:
+			if !s.checkRevocation(ctx, fingerprint) {
+				revoked = true
+				closeAll()
+				wg.Wait()
+				return bytesTx, bytesRx, true
+			}
+		}
+	}
+}
+
+// copyWithDeadline copies data from src to dst using deadline-driven reads.
+// On each read deadline timeout, it checks whether done has been signalled.
+// Returns total bytes copied.
+func (s *Server) copyWithDeadline(src, dst net.Conn, deadline time.Duration, done chan struct{}) int64 {
+	buf := make([]byte, 32*1024)
+	var total int64
+
+	for {
+		_ = src.SetReadDeadline(time.Now().Add(deadline))
+		n, readErr := src.Read(buf)
+		if n > 0 {
+			nw, writeErr := dst.Write(buf[:n])
+			total += int64(nw)
+			if writeErr != nil {
+				s.signalDone(done)
+				return total
+			}
+		}
+
+		if readErr != nil {
+			if ne, ok := readErr.(net.Error); ok && ne.Timeout() {
+				// Read deadline hit — check if we should stop
+				select {
+				case <-done:
+					return total
+				default:
+					continue
+				}
+			}
+			// Real error or EOF
+			s.signalDone(done)
+			return total
+		}
+	}
+}
+
+// signalDone non-blocking close of done channel.
+func (s *Server) signalDone(done chan struct{}) {
+	select {
+	case <-done:
+	default:
+		close(done)
+	}
 }
 
 func (s *Server) logEvent(event, clientAddr, fingerprint, identity string, version int, cacheHit bool, reason string, startTime time.Time) {

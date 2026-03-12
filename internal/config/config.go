@@ -22,11 +22,12 @@ type Config struct {
 }
 
 type ProxyConfig struct {
-	ListenAddress     string        `yaml:"listen_address"`
-	BackendAddress    string        `yaml:"backend_address"`
-	BackendTLS        bool          `yaml:"backend_tls"`
-	MaxConnections    int           `yaml:"max_connections"`
-	KeepaliveInterval time.Duration `yaml:"keepalive_interval"`
+	ListenAddress            string        `yaml:"listen_address"`
+	BackendAddress           string        `yaml:"backend_address"`
+	BackendTLS               bool          `yaml:"backend_tls"`
+	MaxConnections           int           `yaml:"max_connections"`
+	KeepaliveInterval        time.Duration `yaml:"keepalive_interval"`
+	RevocationCheckInterval  time.Duration `yaml:"revocation_check_interval"`
 }
 
 type TLSConfig struct {
@@ -74,9 +75,10 @@ type LoggingConfig struct {
 func DefaultConfig() Config {
 	return Config{
 		Proxy: ProxyConfig{
-			ListenAddress:     ":8443",
-			MaxConnections:    1000,
-			KeepaliveInterval: 30 * time.Second,
+			ListenAddress:           ":8443",
+			MaxConnections:          1000,
+			KeepaliveInterval:       30 * time.Second,
+			RevocationCheckInterval: 30 * time.Second,
 		},
 		TLS: TLSConfig{
 			MinVersion: "1.3",
@@ -137,6 +139,11 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("TALOS_PROXY_BACKEND_ADDRESS"); v != "" {
 		cfg.Proxy.BackendAddress = v
 	}
+	if v := os.Getenv("TALOS_PROXY_REVOCATION_CHECK_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Proxy.RevocationCheckInterval = d
+		}
+	}
 	if v := os.Getenv("TALOS_DATABASE_HOST"); v != "" {
 		cfg.Database.Host = v
 	}
@@ -192,6 +199,10 @@ func validate(cfg Config) error {
 	}
 	if cfg.Database.Host == "" {
 		errs = append(errs, "database.host is required")
+	}
+
+	if v := cfg.Proxy.RevocationCheckInterval; v != 0 && v < time.Second {
+		errs = append(errs, fmt.Sprintf("proxy.revocation_check_interval must be 0 (disabled) or >= 1s, got %v", v))
 	}
 
 	if v := cfg.TLS.MinVersion; v != "" && v != "1.2" && v != "1.3" {

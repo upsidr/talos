@@ -30,6 +30,13 @@ func TestDefaultConfig(t *testing.T) {
 	}
 }
 
+func TestDefaultConfig_RevocationCheckInterval(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Proxy.RevocationCheckInterval != 30*time.Second {
+		t.Errorf("RevocationCheckInterval = %v, want %v", cfg.Proxy.RevocationCheckInterval, 30*time.Second)
+	}
+}
+
 func TestLoad_ValidConfig(t *testing.T) {
 	yaml := `
 proxy:
@@ -111,6 +118,88 @@ tls:
 	}
 	if cfg.Database.Port != 5432 {
 		t.Errorf("Database.Port = %d, want default %d", cfg.Database.Port, 5432)
+	}
+}
+
+func TestLoad_RevocationCheckInterval(t *testing.T) {
+	yamlContent := `
+proxy:
+  backend_address: "localhost:6379"
+  revocation_check_interval: 15s
+tls:
+  ca_certificate_path: "/ca.crt"
+  server_certificate_path: "/server.crt"
+  server_key_path: "/server.key"
+`
+	path := writeTemp(t, yamlContent)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Proxy.RevocationCheckInterval != 15*time.Second {
+		t.Errorf("RevocationCheckInterval = %v, want %v", cfg.Proxy.RevocationCheckInterval, 15*time.Second)
+	}
+}
+
+func TestLoad_RevocationCheckIntervalDisabled(t *testing.T) {
+	yamlContent := `
+proxy:
+  backend_address: "localhost:6379"
+  revocation_check_interval: 0s
+tls:
+  ca_certificate_path: "/ca.crt"
+  server_certificate_path: "/server.crt"
+  server_key_path: "/server.key"
+`
+	path := writeTemp(t, yamlContent)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Proxy.RevocationCheckInterval != 0 {
+		t.Errorf("RevocationCheckInterval = %v, want 0", cfg.Proxy.RevocationCheckInterval)
+	}
+}
+
+func TestLoad_RevocationCheckIntervalTooSmall(t *testing.T) {
+	yamlContent := `
+proxy:
+  backend_address: "localhost:6379"
+  revocation_check_interval: 500ms
+tls:
+  ca_certificate_path: "/ca.crt"
+  server_certificate_path: "/server.crt"
+  server_key_path: "/server.key"
+`
+	path := writeTemp(t, yamlContent)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("Load() expected error for interval < 1s, got nil")
+	}
+	if !contains(err.Error(), "revocation_check_interval") {
+		t.Errorf("error = %q, want to mention revocation_check_interval", err.Error())
+	}
+}
+
+func TestLoad_RevocationCheckIntervalEnvOverride(t *testing.T) {
+	yamlContent := `
+proxy:
+  backend_address: "localhost:6379"
+  revocation_check_interval: 15s
+tls:
+  ca_certificate_path: "/ca.crt"
+  server_certificate_path: "/server.crt"
+  server_key_path: "/server.key"
+`
+	path := writeTemp(t, yamlContent)
+	t.Setenv("TALOS_PROXY_REVOCATION_CHECK_INTERVAL", "45s")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Proxy.RevocationCheckInterval != 45*time.Second {
+		t.Errorf("RevocationCheckInterval = %v, want %v", cfg.Proxy.RevocationCheckInterval, 45*time.Second)
 	}
 }
 

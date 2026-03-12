@@ -46,6 +46,19 @@ func (c *Cache) Get(fingerprint string) (store.CertificateStatus, string, int, b
 	return entry.status, entry.identity, entry.version, true
 }
 
+// GetStatus retrieves only the certificate status by fingerprint.
+// This is a lightweight lookup for periodic revocation re-checks.
+func (c *Cache) GetStatus(fingerprint string) (store.CertificateStatus, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	entry, ok := c.entries[fingerprint]
+	if !ok || time.Now().After(entry.expiresAt) {
+		return "", false
+	}
+	return entry.status, true
+}
+
 // Put stores a certificate status in the cache.
 func (c *Cache) Put(fingerprint string, status store.CertificateStatus, identity string, version int) {
 	c.mu.Lock()
