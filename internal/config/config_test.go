@@ -331,6 +331,259 @@ func TestDatabaseConfig_DSN(t *testing.T) {
 	}
 }
 
+func TestLoad_IssuanceConfig(t *testing.T) {
+	yaml := `
+proxy:
+  backend_address: "localhost:6379"
+tls:
+  ca_certificate_path: "/ca.crt"
+  server_certificate_path: "/server.crt"
+  server_key_path: "/server.key"
+issuance:
+  listen_address: ":8443"
+  tls:
+    certificate_path: "/etc/talos/issuance-server.crt"
+    key_path: "/etc/talos/issuance-server.key"
+  kerberos:
+    keytab_path: "/etc/krb5.keytab"
+    service_principal: "HTTP/talos.upsidr.local@DIRECTORY.UPSIDR.LOCAL"
+    allowed_realms:
+      - DIRECTORY.UPSIDR.LOCAL
+    allowed_principals:
+      - johndoe@DIRECTORY.UPSIDR.LOCAL
+  identity_mapping:
+    strategy: principal
+  certificate:
+    expires_in: 90d
+`
+	path := writeTemp(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Issuance == nil {
+		t.Fatal("Issuance config should not be nil")
+	}
+	if cfg.Issuance.ListenAddress != ":8443" {
+		t.Errorf("ListenAddress = %q, want %q", cfg.Issuance.ListenAddress, ":8443")
+	}
+	if cfg.Issuance.TLS.CertificatePath != "/etc/talos/issuance-server.crt" {
+		t.Errorf("TLS.CertificatePath = %q", cfg.Issuance.TLS.CertificatePath)
+	}
+	if cfg.Issuance.Kerberos.KeytabPath != "/etc/krb5.keytab" {
+		t.Errorf("KeytabPath = %q", cfg.Issuance.Kerberos.KeytabPath)
+	}
+	if cfg.Issuance.Kerberos.ServicePrincipal != "HTTP/talos.upsidr.local@DIRECTORY.UPSIDR.LOCAL" {
+		t.Errorf("ServicePrincipal = %q", cfg.Issuance.Kerberos.ServicePrincipal)
+	}
+	if len(cfg.Issuance.Kerberos.AllowedRealms) != 1 || cfg.Issuance.Kerberos.AllowedRealms[0] != "DIRECTORY.UPSIDR.LOCAL" {
+		t.Errorf("AllowedRealms = %v", cfg.Issuance.Kerberos.AllowedRealms)
+	}
+	if len(cfg.Issuance.Kerberos.AllowedPrincipals) != 1 || cfg.Issuance.Kerberos.AllowedPrincipals[0] != "johndoe@DIRECTORY.UPSIDR.LOCAL" {
+		t.Errorf("AllowedPrincipals = %v", cfg.Issuance.Kerberos.AllowedPrincipals)
+	}
+	if cfg.Issuance.IdentityMapping.Strategy != "principal" {
+		t.Errorf("Strategy = %q", cfg.Issuance.IdentityMapping.Strategy)
+	}
+	if cfg.Issuance.Certificate.ExpiresIn != "90d" {
+		t.Errorf("ExpiresIn = %q", cfg.Issuance.Certificate.ExpiresIn)
+	}
+}
+
+func TestLoad_IssuanceNil(t *testing.T) {
+	yaml := `
+proxy:
+  backend_address: "localhost:6379"
+tls:
+  ca_certificate_path: "/ca.crt"
+  server_certificate_path: "/server.crt"
+  server_key_path: "/server.key"
+`
+	path := writeTemp(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Issuance != nil {
+		t.Error("Issuance config should be nil when not configured")
+	}
+}
+
+func TestLoad_IssuanceMissingRequired(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+		want string
+	}{
+		{
+			name: "missing listen_address",
+			yaml: `
+issuance:
+  tls:
+    certificate_path: "/cert.pem"
+    key_path: "/key.pem"
+  kerberos:
+    keytab_path: "/keytab"
+    service_principal: "HTTP/host@REALM"
+    allowed_realms: [REALM]
+`,
+			want: "issuance.listen_address is required",
+		},
+		{
+			name: "missing tls cert",
+			yaml: `
+issuance:
+  listen_address: ":8443"
+  tls:
+    key_path: "/key.pem"
+  kerberos:
+    keytab_path: "/keytab"
+    service_principal: "HTTP/host@REALM"
+    allowed_realms: [REALM]
+`,
+			want: "issuance.tls.certificate_path is required",
+		},
+		{
+			name: "missing keytab_path",
+			yaml: `
+issuance:
+  listen_address: ":8443"
+  tls:
+    certificate_path: "/cert.pem"
+    key_path: "/key.pem"
+  kerberos:
+    service_principal: "HTTP/host@REALM"
+    allowed_realms: [REALM]
+`,
+			want: "issuance.kerberos.keytab_path is required",
+		},
+		{
+			name: "missing service_principal",
+			yaml: `
+issuance:
+  listen_address: ":8443"
+  tls:
+    certificate_path: "/cert.pem"
+    key_path: "/key.pem"
+  kerberos:
+    keytab_path: "/keytab"
+    allowed_realms: [REALM]
+`,
+			want: "issuance.kerberos.service_principal is required",
+		},
+		{
+			name: "missing allowed_realms",
+			yaml: `
+issuance:
+  listen_address: ":8443"
+  tls:
+    certificate_path: "/cert.pem"
+    key_path: "/key.pem"
+  kerberos:
+    keytab_path: "/keytab"
+    service_principal: "HTTP/host@REALM"
+`,
+			want: "issuance.kerberos.allowed_realms is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeTemp(t, tt.yaml)
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("Load() expected error, got nil")
+			}
+			if got := err.Error(); !contains(got, tt.want) {
+				t.Errorf("error = %q, want to contain %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoad_IssuanceEnvOverride(t *testing.T) {
+	yaml := `
+issuance:
+  listen_address: ":8443"
+  tls:
+    certificate_path: "/cert.pem"
+    key_path: "/key.pem"
+  kerberos:
+    keytab_path: "/keytab"
+    service_principal: "HTTP/host@REALM"
+    allowed_realms: [REALM]
+  identity_mapping:
+    strategy: principal
+`
+	path := writeTemp(t, yaml)
+	t.Setenv("TALOS_ISSUANCE_LISTEN_ADDRESS", ":9443")
+	t.Setenv("TALOS_ISSUANCE_KERBEROS_KEYTAB_PATH", "/alt/keytab")
+	t.Setenv("TALOS_ISSUANCE_IDENTITY_MAPPING_STRATEGY", "username")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Issuance.ListenAddress != ":9443" {
+		t.Errorf("ListenAddress = %q, want %q", cfg.Issuance.ListenAddress, ":9443")
+	}
+	if cfg.Issuance.Kerberos.KeytabPath != "/alt/keytab" {
+		t.Errorf("KeytabPath = %q, want %q", cfg.Issuance.Kerberos.KeytabPath, "/alt/keytab")
+	}
+	if cfg.Issuance.IdentityMapping.Strategy != "username" {
+		t.Errorf("Strategy = %q, want %q", cfg.Issuance.IdentityMapping.Strategy, "username")
+	}
+}
+
+func TestLoad_IssuanceInvalidStrategy(t *testing.T) {
+	yaml := `
+issuance:
+  listen_address: ":8443"
+  tls:
+    certificate_path: "/cert.pem"
+    key_path: "/key.pem"
+  kerberos:
+    keytab_path: "/keytab"
+    service_principal: "HTTP/host@REALM"
+    allowed_realms: [REALM]
+  identity_mapping:
+    strategy: invalid
+`
+	path := writeTemp(t, yaml)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("Load() expected error for invalid strategy, got nil")
+	}
+	if !contains(err.Error(), "issuance.identity_mapping.strategy") {
+		t.Errorf("error = %q, want to mention strategy", err.Error())
+	}
+}
+
+func TestLoad_IssuanceOnlyMode(t *testing.T) {
+	yaml := `
+issuance:
+  listen_address: ":8443"
+  tls:
+    certificate_path: "/cert.pem"
+    key_path: "/key.pem"
+  kerberos:
+    keytab_path: "/keytab"
+    service_principal: "HTTP/host@REALM"
+    allowed_realms: [REALM]
+`
+	path := writeTemp(t, yaml)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v (issuance-only mode should not require proxy fields)", err)
+	}
+	if cfg.Issuance == nil {
+		t.Fatal("Issuance config should not be nil")
+	}
+	if cfg.Proxy.BackendAddress != "" {
+		t.Error("BackendAddress should be empty in issuance-only mode")
+	}
+}
+
 func writeTemp(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
