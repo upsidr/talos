@@ -27,6 +27,7 @@ func main() {
 		newCertCmd(),
 		newCACmd(),
 		newDBCmd(),
+		newIssuanceCmd(),
 		newVersionCmd(),
 	)
 
