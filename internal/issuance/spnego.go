@@ -2,11 +2,14 @@ package issuance
 
 import (
 	"context"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/jcmturner/goidentity/v6"
 	"github.com/jcmturner/gokrb5/v8/keytab"
+	"github.com/jcmturner/gokrb5/v8/service"
 	"github.com/jcmturner/gokrb5/v8/spnego"
 	"go.uber.org/zap"
 )
@@ -91,7 +94,10 @@ func NewKeytabMiddleware(kt *keytab.Keytab, logger *zap.Logger) func(http.Handle
 		})
 
 		// Wrap with gokrb5's SPNEGO handler
-		return spnego.SPNEGOKRB5Authenticate(extractor, kt)
+		// DecodePAC(false) skips PAC checksum verification which fails with
+		// FreeIPA due to unsupported checksum algorithms in gokrb5.
+		l := log.New(os.Stderr, "GOKRB5: ", log.LstdFlags)
+		return spnego.SPNEGOKRB5Authenticate(extractor, kt, service.Logger(l), service.DecodePAC(false))
 	}
 }
 
