@@ -7,6 +7,7 @@ proxy:
   backend_tls: false
   max_connections: 1000
   keepalive_interval: 30s
+  revocation_check_interval: 30s  # 0 to disable periodic checks on active connections
 
 tls:
   ca_certificate_path: "dev/ca.crt"
@@ -25,6 +26,7 @@ database:
   user: "talos"
   password: ""           # Prefer TALOS_DATABASE_PASSWORD env var
   sslmode: "disable"     # disable, require, verify-ca, verify-full
+  # sslrootcert: ""      # Path to CA cert for verify-ca / verify-full
   max_open_connections: 10
   max_idle_connections: 5
   connection_max_lifetime: 30m
@@ -40,3 +42,27 @@ certificate:
 logging:
   format: "json"   # json or console
   level: "info"    # debug, info, warn, error
+
+# Kerberos-authenticated certificate issuance server (v0.1.2)
+# Uncomment to enable self-service certificate issuance.
+# issuance:
+#   listen_address: ":18443"
+#
+#   tls:
+#     certificate_path: /etc/talos/issuance-server.crt
+#     key_path: /etc/talos/issuance-server.key
+#
+#   kerberos:
+#     keytab_path: /etc/krb5/keytabs/talos.keytab
+#     service_principal: HTTP/talos.upsidr.local@DIRECTORY.UPSIDR.LOCAL
+#     allowed_realms:
+#       - DIRECTORY.UPSIDR.LOCAL
+#     allowed_principals: []
+#     # - johndoe@DIRECTORY.UPSIDR.LOCAL
+#     # - dev-team@DIRECTORY.UPSIDR.LOCAL
+#
+#   identity_mapping:
+#     strategy: principal  # "principal" (full) or "username" (without realm)
+#
+#   certificate:
+#     expires_in: 90d  # Falls back to certificate.default_validity if not set

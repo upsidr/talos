@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage: bash client.sh <server-hostname> [--port PORT] [--out-dir DIR]
 
 readonly VERSION="0.1.2"
-readonly DEFAULT_PORT="8443"
+readonly DEFAULT_PORT="18443"
 readonly DEFAULT_OUT_DIR="."
 
 main() {
